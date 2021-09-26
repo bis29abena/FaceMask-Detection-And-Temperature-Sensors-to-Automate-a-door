@@ -6,12 +6,57 @@ from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 from tensorflow.keras.preprocessing.image import img_to_array
 from tensorflow.keras.models import load_model
 from imutils.video import VideoStream
+from smbus2 import SMBus
+from mlx90614 import MLX90614
+from datetime import date
+import smtplib
 import numpy as np
 import argparse
 import imutils
 import time
 import cv2
 import os
+
+# setting up a counter to count the number of people who opened the door
+count = 0
+
+# writing a function to send email to who ever is in charge
+def send_mail(number_of_people):
+    
+    today = date.today()
+    
+    connection = smtplib.SMTP("smtp.gmail.com", 587)
+    connection.starttls()
+    connection.login(user="bismark2923@gmail.com", password="&Y#&873D9K&F")
+    connection.sendmail(from_addr="bismark2923@gmail.com",
+                        to_addrs="lizbethfosu@gmail.com",
+                        msg=f"Subject: COVID19 PROTOCOLS\n\n {today} the number of people who entered with mask and good temperature was {number_of_people} people")
+    connection.quit()
+    print(number_of_people)
+# Function to read an object temperture
+# A threshold temperature will be set
+# If an oject exceeds that threshold then the door wont open
+# with value of the face mask detection
+def temperature(detection):
+    bus = SMBus(1)
+    sensor = MLX90614(bus, address=0x5A)
+    
+    # Checking if the detection is a mask or not
+    if detection == "Mask":
+        if sensor.get_object_1() >= 29:
+            print(f"Individual Wearing Mask")
+            print(f"individual Temperature : {sensor.get_object_1()}")
+            print(f"Door Open")
+            return detection
+        elif sensor.get_object_1() >= 37:
+            print(f"Individual Wearing Mask")
+            print(f"individual Temperature : {sensor.get_object_1()}")
+            print("Door Can't Open")            
+    else:
+        print(f"No Mask")
+        print("Door Can't Open")
+    bus.close()
+            
 
 
 def detect_and_predict_mask(frame, faceNet, maskNet):
@@ -124,18 +169,25 @@ while True:
 
         # determine the class label and color we'll use to draw
         # the bounding box and text
-        label = "Mask" if mask > withoutMask else "No Mask"
-        color = (0, 255, 0) if label == "Mask" else (0, 0, 255)
-        print(label)
-
+        label_ = "Mask" if mask > withoutMask else "No Mask"
+        color = (0, 255, 0) if label_ == "Mask" else (0, 0, 255)
+        
+        # Checking the temperature of the individual
+        value_detect = temperature(label_)
+        
+        if value_detect == "Mask":
+            count+=1
+        
         # include the probability in the label
-        label = "{}: {:.2f}%".format(label, max(mask, withoutMask) * 100)
+        label = "{}: {:.2f}%".format(label_, max(mask, withoutMask) * 100)
 
         # display the label and bounding box rectangle on the output
         # frame
         cv2.putText(frame, label, (startX, startY - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 2)
         cv2.rectangle(frame, (startX, startY), (endX, endY), color, 2)
+        
+        
 
     # show the output frame
     cv2.imshow("Frame", frame)
@@ -145,6 +197,7 @@ while True:
     if key == ord("q"):
         break
 
+send_mail(count)
 # do a bit of cleanup
 cv2.destroyAllWindows()
 vs.stop()
